@@ -1144,10 +1144,17 @@ def main():
         if signer_cert_der is None:
             print("[-] Auto-signer enrollment failed: no accessible template found")
             sys.exit(1)
-        signer_cert = x509.load_der_x509_certificate(signer_cert_der)
-        # extract leaf if PKCS7 chain returned
+        # MS-ICPR may hand back the issued cert either as a bare DER certificate
+        # or as a PKCS#7 chain. x509.load_der_x509_certificate() RAISES on the
+        # latter (it never returns None), so the old `if signer_cert is None`
+        # fallback was unreachable and --auto-signer crashed whenever the CA
+        # returned a chain. Route through extract_leaf_cert(), which tries a bare
+        # cert first and falls back to PKCS#7 - the same helper the issued-cert
+        # path already uses.
+        signer_cert = extract_leaf_cert(signer_cert_der)
         if signer_cert is None:
-            signer_cert = extract_leaf_cert(signer_cert_der)
+            print("[-] Auto-signer cert parse failed (not a bare cert or PKCS#7 chain)")
+            sys.exit(1)
         print(f"[+] Auto-signer cert obtained: {signer_cert.subject.rfc4514_string()}")
     else:
         print(f"[*] Loading signer cert: {args.cert}")
